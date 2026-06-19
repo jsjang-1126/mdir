@@ -10,6 +10,9 @@ build/
 # Local docs (contains private server notes)
 docs/
 
+# Local deploy config (may contain server IPs/keys)
+scripts/deploy-from-windows.ps1
+
 # Virtual environment
 .venv/
 venv/

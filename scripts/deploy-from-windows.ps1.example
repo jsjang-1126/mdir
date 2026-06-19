@@ -1,0 +1,38 @@
+# Deploy mdir from Windows to a remote server.
+# Copy this file to deploy-from-windows.ps1 and fill in your values.
+# deploy-from-windows.ps1 is gitignored (local only).
+#
+# Usage:
+#   .\scripts\deploy-from-windows.ps1
+
+$ErrorActionPreference = "Stop"
+
+# SSH Host aliases from your Windows ~/.ssh/config
+$SourceHost = "user@your-dev-machine"
+$DeployHost = "your-remote-host"          # e.g. Host entry in ~/.ssh/config
+$KeyFile    = "$env:USERPROFILE\.ssh\your_deploy_key"
+$RemoteDir  = "apps/mdir"
+
+if (-not (Test-Path $KeyFile)) {
+    Write-Error "Key not found: $KeyFile"
+}
+
+Write-Host "1) Fetch mdir from dev machine ..."
+$temp = Join-Path $env:TEMP "mdir-deploy"
+if (Test-Path $temp) { Remove-Item -Recurse -Force $temp }
+New-Item -ItemType Directory -Path $temp | Out-Null
+
+ssh $SourceHost "tar czf - -C ~/apps mdir --exclude=mdir/.venv --exclude=mdir/__pycache__ --exclude=mdir/.git" |
+    tar xzf - -C $temp
+
+Write-Host "2) Upload to $DeployHost ..."
+ssh -i $KeyFile -o StrictHostKeyChecking=accept-new $DeployHost "mkdir -p ~/$RemoteDir"
+scp -i $KeyFile -r "$temp\mdir\*" "${DeployHost}:~/$RemoteDir/"
+
+Write-Host "3) Install on remote ..."
+ssh -i $KeyFile $DeployHost "bash ~/$RemoteDir/scripts/remote-setup.sh ~/$RemoteDir"
+
+Write-Host ""
+Write-Host "Done. Connect with:"
+Write-Host "  ssh -i $KeyFile $DeployHost"
+Write-Host "  mdir"
