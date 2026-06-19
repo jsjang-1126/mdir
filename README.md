@@ -25,16 +25,6 @@
 
 Terminal file explorer for Ubuntu/Linux, inspired by Midnight Commander.
 
-**Full documentation:** [docs/README.md](docs/README.md) — development history, architecture, bugs/fixes, deploy, AI collaboration guide.
-
-```
-* 개발노트: 구형 노트북에 리눅스 깔았다가 좋기도하고 불편하기도 해서 Cursor랑 하루 만에 만든 mdir TUI 파일 관리자입니다.
-* 내    용: 어제(2026/06/18) 구형 노트북에 우분투 설치하고 파일 보기가 너무 불편해서, 옛날 DOS 시절 Mdir 향수를 담아 Cursor와 함께 뚝딱 만들어 보았습니다. 아직 0.1.0 버전이라 미흡하지만 공유해 봅니다.
-
-"이 프로젝트는 90년대 DOS 시절 전설적인 파일 관리자였던 최창원 님의 'Mdir'에 대한 오마주(향수)로 제작된 리눅스 TUI 도구입니다."
-
-by jsunrise1126@gmail.com
-```
 ## Install
 
 ```bash

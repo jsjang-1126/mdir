@@ -7,6 +7,9 @@ dist/
 build/
 *.egg
 
+# Local docs (contains private server notes)
+docs/
+
 # Virtual environment
 .venv/
 venv/
