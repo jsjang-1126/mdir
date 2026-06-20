@@ -79,9 +79,72 @@ python -m mdir ~/Downloads
 | n | Edit with Nono Editor |
 | p | Toggle preview pane |
 | r | Refresh |
+| s | Shell command in current folder |
 | v | Edit with Vim Editor |
 | q | Quit |
 
 Bookmarks are stored in `~/.config/mdir/bookmarks.json`.
 
+Shell command history (per folder, max 30) is stored in `~/.config/mdir/shell-history.json`.
+
 The layout fills the terminal window and reflows when you resize it.
+
+## WSL (Windows)
+
+mdir runs on **WSL2 + Ubuntu** (same as Linux). Use **Windows Terminal** or `wsl` for best results.
+
+### Option A — inside WSL (recommended)
+
+```bash
+git clone https://github.com/jsjang-1126/mdir.git ~/apps/mdir
+bash ~/apps/mdir/scripts/install-wsl.sh
+source ~/.bashrc
+mdir
+```
+
+Browse Windows files:
+
+```bash
+mdir /mnt/c/Users
+mdir /mnt/c/Users/YourName/Downloads
+```
+
+### Option B — from Windows PowerShell
+
+```powershell
+cd C:\path\to\mdir
+powershell -ExecutionPolicy Bypass -File scripts\setup-wsl-from-windows.ps1
+```
+
+Then in WSL: `source ~/.bashrc` and `mdir`.
+
+### Option C — Release binary (no Python in WSL)
+
+```bash
+wget https://github.com/jsjang-1126/mdir/releases/download/v0.1.0/mdir -O ~/bin/mdir
+chmod +x ~/bin/mdir
+export PATH="$HOME/bin:$PATH"
+mdir
+```
+
+**WSL notes:** Use **English input** in Windows Terminal for shortcut keys (`Tab`, `s`, `q`). Optional: `sudo apt install vim nano` for `v` / `n`. `xdg-open` may need `wslu` (`sudo apt install wslu`) to open files in Windows.
+
+## Download (single binary, Linux)
+
+No Python install needed — download `mdir` from [GitHub Releases](https://github.com/jsjang-1126/mdir/releases), then:
+
+```bash
+chmod +x mdir
+./mdir
+```
+
+Optional: move to your PATH, e.g. `mv mdir ~/bin/` or `sudo mv mdir /usr/local/bin/`.
+
+**Note:** The release binary is built for **Linux x86_64**. ARM Mac/PC or Windows need a separate build or use `pip install` from source.
+
+## Build binary (maintainers)
+
+```bash
+bash scripts/build-binary.sh
+# → dist/mdir  (~14MB, includes Python + Textual)
+```

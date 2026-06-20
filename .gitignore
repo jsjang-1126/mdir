@@ -33,3 +33,7 @@ iwin_key
 pip-log.txt
 .pytest_cache/
 .mypy_cache/
+
+# PyInstaller
+build/
+dist/

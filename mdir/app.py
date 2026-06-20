@@ -4,7 +4,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from textual import on, work
+from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
@@ -14,7 +14,11 @@ from mdir import __version__
 from mdir.bookmarks import add_bookmark, load_bookmarks, remove_bookmark
 from mdir.operations import OperationError, copy_item, delete, mkdir, move_item, rename
 from mdir.preview import PreviewPane, is_text_file
-from mdir.widgets import CenterModal, ChoiceModal, FilePanel, InputModal
+from mdir.input_mode import switch_to_english_input
+from mdir.shell_history import add_command
+from mdir.shell_runner import run_shell_command
+from mdir.themes import MDIR_THEMES
+from mdir.widgets import CenterModal, ChoiceModal, FilePanel, InputModal, ShellModal, ShellOutputModal
 
 
 class MdirApp(App):
@@ -38,8 +42,9 @@ class MdirApp(App):
         Binding("p", "toggle_preview", "Preview"),
         Binding("v", "edit_vim", "Vim"),
         Binding("n", "edit_nano", "Nano"),
+        Binding("s", "shell_panel", "Shell"),
         Binding("r", "refresh_panels", "Refresh"),
-        Binding("q", "quit", "Quit"),
+        Binding("q", "quit_or_dismiss", "Quit"),
     ]
 
     def __init__(self, start_path: Path | None = None) -> None:
@@ -49,6 +54,22 @@ class MdirApp(App):
         self._right_path = home
         self._active_panel_id = "left-panel"
         self._modal_return_panel_id = "left-panel"
+        self._shell_output_mode = False
+
+    def set_shell_output_mode(self, active: bool) -> None:
+        """Disable terminal mouse tracking while shell output modal is open."""
+        self._shell_output_mode = active
+        driver = self._driver
+        if driver is None:
+            return
+        if active:
+            if hasattr(driver, "_disable_mouse_support"):
+                driver._disable_mouse_support()
+            self.capture_mouse(None)
+        else:
+            if hasattr(driver, "_enable_mouse_support"):
+                driver._enable_mouse_support()
+            switch_to_english_input()
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="main-layout"):
@@ -61,12 +82,15 @@ class MdirApp(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.set_timer(0.05, switch_to_english_input)
+        for theme in MDIR_THEMES:
+            self.register_theme(theme)
         self._set_active_panel("left-panel")
         self._update_status("Ready")
 
     def _help_text(self) -> str:
         return (
-            "Tab:panel  Enter:open  u:up  v:vim  n:nano  F2:rename  F5:copy  F6:move  "
+            "Tab:panel  Enter:open  u:up  s:shell  v:vim  n:nano  F2:rename  F5:copy  F6:move  "
             "F7:mkdir  F8:del  /:search  b:bookmark  g:goto  p:preview  q:quit"
         )
 
@@ -116,7 +140,7 @@ class MdirApp(App):
     def _update_preview(self, entry_path: Path | None) -> None:
         self.query_one("#preview-pane", PreviewPane).show_path(entry_path)
 
-    def _modal_mount(self, widget: InputModal | ChoiceModal) -> None:
+    def _modal_mount(self, widget: InputModal | ChoiceModal | ShellModal | ShellOutputModal) -> None:
         if not self._modal_open():
             self._modal_return_panel_id = self._active_panel_id
         self.mount(CenterModal(widget, self._modal_return_panel_id))
@@ -124,7 +148,7 @@ class MdirApp(App):
     @on(FilePanel.SelectionChanged)
     def on_panel_selection(self, event: FilePanel.SelectionChanged) -> None:
         if event.panel.id != self._active_panel_id:
-            return
+            event.panel.claim_active()
         entry = event.entry
         path = None if entry is None or entry.name == ".." else entry.path
         self._update_preview(path)
@@ -141,6 +165,26 @@ class MdirApp(App):
 
     def _guard_modal(self) -> bool:
         return self._modal_open()
+
+    def _dismiss_shell_ui(self) -> bool:
+        if self.query("ShellOutputModal"):
+            self.query_one(ShellOutputModal).action_dismiss_output()
+            return True
+        if self.query("ShellModal"):
+            self.query_one(ShellModal).action_cancel_shell()
+            return True
+        return False
+
+    def action_quit_or_dismiss(self) -> None:
+        if self._dismiss_shell_ui():
+            return
+        if self._guard_modal():
+            return
+        self.exit()
+
+    def on_key(self, event: events.Key) -> None:
+        if event.key == "escape" and self._dismiss_shell_ui():
+            event.stop()
 
     def action_switch_panel(self) -> None:
         if self._guard_modal():
@@ -187,9 +231,59 @@ class MdirApp(App):
         with self.suspend():
             subprocess.call([editor, str(path)])
 
+        switch_to_english_input()
         self.active_panel().refresh_listing()
         self.inactive_panel().refresh_listing()
         self._update_status(f"Closed {editor}: {path.name}")
+
+    def _run_shell_command(self, folder: Path, command: str) -> None:
+        add_command(folder, command)
+
+        if not self._modal_open():
+            self._modal_return_panel_id = self._active_panel_id
+        self.mount(
+            CenterModal(
+                ShellOutputModal(folder, command, output=None),
+                self._modal_return_panel_id,
+                block_mouse=True,
+            )
+        )
+        short = command if len(command) <= 50 else command[:47] + "..."
+        self._update_status(f"Shell running: {short}")
+        self._execute_shell_command(folder, command)
+
+    @work(thread=True, exclusive=True)
+    def _execute_shell_command(self, folder: Path, command: str) -> None:
+        _code, output = run_shell_command(folder, command)
+        self.call_from_thread(self._finish_shell_command, folder, command, output)
+
+    def _finish_shell_command(self, folder: Path, command: str, output: str) -> None:
+        try:
+            modal = self.query_one(ShellOutputModal)
+            modal.set_output(output)
+        except Exception:
+            self.set_shell_output_mode(False)
+
+        self.active_panel().refresh_listing()
+        self.inactive_panel().refresh_listing()
+        short = command if len(command) <= 50 else command[:47] + "..."
+        self._update_status(f"Shell done: {short}")
+
+    def action_shell_panel(self) -> None:
+        if self._guard_modal():
+            return
+        folder = self.active_panel().current_path
+
+        def on_execute(command: str) -> None:
+            self._run_shell_command(folder, command)
+
+        self._modal_mount(
+            ShellModal(
+                folder,
+                on_execute=on_execute,
+                on_cancel=lambda: self._update_status("Shell cancelled"),
+            )
+        )
 
     def action_edit_vim(self) -> None:
         if self._guard_modal():
